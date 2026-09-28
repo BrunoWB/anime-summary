@@ -1,4 +1,4 @@
-import { AniListCollection, TasteBiases, BaseBiasMode } from '../types/anilist.ts';
+import { AniListCollection, TasteBiases, BaseBiasMode, SummarySectionToggles } from '../types/anilist.ts';
 
 const DB_NAME = 'AnimeSummaryDB';
 const DB_VERSION = 1;
@@ -30,6 +30,7 @@ export interface UserSteeringState {
   includedTropes?: string[];
   excludedTropes?: string[];
   baseBias?: BaseBiasMode;
+  summarySections?: Partial<SummarySectionToggles>;
   timestamp: number;
 }
 
@@ -256,6 +257,7 @@ export function saveUserSteering(
     includedTropes?: string[];
     excludedTropes?: string[];
     baseBias?: BaseBiasMode;
+    summarySections?: Partial<SummarySectionToggles>;
   }
 ): void {
   if (!username) return;
@@ -271,6 +273,7 @@ export function saveUserSteering(
     includedTropes: steering.includedTropes || [],
     excludedTropes: steering.excludedTropes || [],
     baseBias: steering.baseBias || 'none',
+    summarySections: steering.summarySections,
     timestamp: Date.now()
   };
   try {

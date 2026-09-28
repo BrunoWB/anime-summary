@@ -5,7 +5,7 @@ import { OverviewCards } from './components/OverviewCards.tsx';
 import { AffinitiesView } from './components/AffinitiesView.tsx';
 import { ContrarianView } from './components/ContrarianView.tsx';
 import { ResultsDownloadCard } from './components/ResultsDownloadCard.tsx';
-import { TasteProfile, TasteBiases, createEmptyBiases, AniListCollection, BaseBiasMode } from './types/anilist.ts';
+import { TasteProfile, TasteBiases, createEmptyBiases, AniListCollection, BaseBiasMode, SummarySectionToggles, createDefaultSummarySections } from './types/anilist.ts';
 import { fetchAniListByUsername, loadMockDump } from './services/anilistService.ts';
 import { buildTasteProfile } from './algorithms/scoringEngine.ts';
 import {
@@ -19,7 +19,8 @@ import {
   clearUserSteering,
   CachedQueryMeta
 } from './services/cacheService.ts';
-import { AlertCircle, X, RotateCcw, RefreshCw, Sparkles } from 'lucide-react';
+import { AlertCircle, X, RotateCcw, RefreshCw, Sparkles, Calendar } from 'lucide-react';
+import { FixDatesPage } from './pages/FixDatesPage.tsx';
 
 function getAppBasePath(): string {
   const base = import.meta.env.BASE_URL || '/';
@@ -51,6 +52,14 @@ function navigateToHome(replace = false) {
   }
 }
 
+function navigateToFixDates() {
+  const base = getAppBasePath();
+  const target = `${base}fixdates`;
+  if (window.location.pathname !== target) {
+    window.history.pushState(null, '', target);
+  }
+}
+
 export const App: React.FC = () => {
   const [profile, setProfile] = useState<TasteProfile | null>(null);
   const [rawCollection, setRawCollection] = useState<AniListCollection | null>(null);
@@ -61,6 +70,7 @@ export const App: React.FC = () => {
   const [lastFetchTime, setLastFetchTime] = useState<number>(0);
   const [currentTime, setCurrentTime] = useState<number>(Date.now());
   const [biases, setBiases] = useState<TasteBiases>(createEmptyBiases());
+  const [appView, setAppView] = useState<'main' | 'fixdates'>('main');
   const [promotedGenres, setPromotedGenres] = useState<string[]>([]);
   const [promotedPenalizedGenres, setPromotedPenalizedGenres] = useState<string[]>([]);
   const [promotedStudios, setPromotedStudios] = useState<string[]>([]);
@@ -69,6 +79,14 @@ export const App: React.FC = () => {
   const [demotedStudios, setDemotedStudios] = useState<string[]>([]);
   const [includedTropes, setIncludedTropes] = useState<string[]>([]);
   const [excludedTropes, setExcludedTropes] = useState<string[]>([]);
+  const [summarySections, setSummarySections] = useState<SummarySectionToggles>(createDefaultSummarySections());
+
+  const handleToggleSummarySection = (section: keyof SummarySectionToggles) => {
+    setSummarySections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -87,8 +105,11 @@ export const App: React.FC = () => {
     );
   }, [biases]);
 
+  const hasDisabledSummarySections = Object.values(summarySections).some(v => !v);
+
   const hasSteering = Boolean(
     hasBiases ||
+    hasDisabledSummarySections ||
     baseBias !== 'none' ||
     promotedGenres.length > 0 ||
     promotedPenalizedGenres.length > 0 ||
@@ -124,6 +145,17 @@ export const App: React.FC = () => {
       setDemotedStudios(savedSteering.demotedStudios || []);
       setIncludedTropes(savedSteering.includedTropes || []);
       setExcludedTropes(savedSteering.excludedTropes || []);
+      if (savedSteering.summarySections) {
+        setSummarySections({
+          genres: savedSteering.summarySections.genres ?? true,
+          tropes: savedSteering.summarySections.tropes ?? true,
+          studios: savedSteering.summarySections.studios ?? true,
+          eras: savedSteering.summarySections.eras ?? true,
+          divergence: savedSteering.summarySections.divergence ?? true
+        });
+      } else {
+        setSummarySections(createDefaultSummarySections());
+      }
     } else {
       setBiases(createEmptyBiases());
       setPromotedGenres([]);
@@ -134,6 +166,7 @@ export const App: React.FC = () => {
       setDemotedStudios([]);
       setIncludedTropes([]);
       setExcludedTropes([]);
+      setSummarySections(createDefaultSummarySections());
     }
 
     if (syncUrl) {
@@ -149,7 +182,7 @@ export const App: React.FC = () => {
     }
   };
 
-  // Auto-save user steering whenever biases, promoted items, demoted items, tropes, or base bias change
+  // Auto-save user steering whenever biases, promoted items, demoted items, tropes, base bias, or summary sections change
   useEffect(() => {
     if (!profile) return;
     saveUserSteering(profile.username, {
@@ -162,7 +195,8 @@ export const App: React.FC = () => {
       demotedStudios,
       includedTropes,
       excludedTropes,
-      baseBias
+      baseBias,
+      summarySections
     });
   }, [
     profile,
@@ -175,11 +209,19 @@ export const App: React.FC = () => {
     demotedStudios,
     includedTropes,
     excludedTropes,
-    baseBias
+    baseBias,
+    summarySections
   ]);
 
   // Synchronize route with local cache on mount and on popstate
   const handleRouteSync = async () => {
+    const isFixDates = window.location.pathname.endsWith('/fixdates');
+    if (isFixDates) {
+      setAppView('fixdates');
+      return;
+    } else {
+      setAppView('main');
+    }
     const username = getUsernameFromPath(window.location.pathname);
     if (username) {
       setIsLoading(true);
@@ -383,6 +425,7 @@ export const App: React.FC = () => {
     setDemotedStudios([]);
     setIncludedTropes([]);
     setExcludedTropes([]);
+    setSummarySections(createDefaultSummarySections());
     setBaseBias('none');
     if (rawCollection && profile) {
       const recomputed = buildTasteProfile(rawCollection, profile.username, 'none');
@@ -408,6 +451,7 @@ export const App: React.FC = () => {
     setIncludedTropes([]);
     setExcludedTropes([]);
     navigateToHome();
+    setAppView('main');
     setCachedMeta(getCachedQueryMeta());
   };
 
@@ -444,6 +488,12 @@ export const App: React.FC = () => {
             onDeleteCached={handleDeleteCached}
             isLoading={isLoading}
           />
+        ) : appView === 'fixdates' ? (
+            <FixDatesPage 
+              rawCollection={rawCollection} 
+              username={profile.username} 
+              onNavigateBack={() => { navigateToUser(profile.username); setAppView('main'); }} 
+            />
         ) : (
           <div className="space-y-8 pb-16">
             {/* Compact search & controls bar */}
@@ -505,6 +555,15 @@ export const App: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    onClick={() => { navigateToFixDates(); setAppView('fixdates'); }}
+                    className="px-3.5 py-1.5 rounded-lg border border-[#1E2538] hover:border-violet-500/50 bg-[#0E1118] text-violet-400 hover:text-violet-300 text-xs font-mono transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>Fix Dates</span>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={handleResetBiases}
                     disabled={!hasSteering}
                     title={hasSteering ? "Reset all taste biases, promotions, and demotions" : "No active steering to reset"}
@@ -543,7 +602,16 @@ export const App: React.FC = () => {
               <OverviewCards profile={profile} />
 
               {/* 2. Prominent Download Results Action Card */}
-              <ResultsDownloadCard profile={profile} biases={biases} excludedTropes={excludedTropes} promotedGenres={promotedGenres} demotedGenres={demotedGenres} promotedStudios={promotedStudios} demotedStudios={demotedStudios} />
+              <ResultsDownloadCard
+                profile={profile}
+                biases={biases}
+                excludedTropes={excludedTropes}
+                promotedGenres={promotedGenres}
+                demotedGenres={demotedGenres}
+                promotedStudios={promotedStudios}
+                demotedStudios={demotedStudios}
+                summarySections={summarySections}
+              />
 
               {/* 3. Mathematical Affinities (Bayesian Genres, Studios, Tropes, Eras, Sources) */}
               <AffinitiesView
@@ -567,10 +635,16 @@ export const App: React.FC = () => {
                 excludedTropes={excludedTropes}
                 onIncludeTrope={handleIncludeTrope}
                 onRemoveTrope={handleRemoveTrope}
+                summarySections={summarySections}
+                onToggleSummarySection={handleToggleSummarySection}
               />
 
               {/* 4. Contrarian Divergence vs Community */}
-              <ContrarianView profile={profile} />
+              <ContrarianView
+                profile={profile}
+                summaryEnabled={summarySections.divergence}
+                onToggleSummary={() => handleToggleSummarySection('divergence')}
+              />
             </div>
           </div>
         )}

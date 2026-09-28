@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { TasteProfile, TasteBiases, TropeSalienceItem, AffinityItem } from '../types/anilist.ts';
+import { TasteProfile, TasteBiases, TropeSalienceItem, AffinityItem, SummarySectionToggles } from '../types/anilist.ts';
 import { calculateTropeSalience } from '../algorithms/tropeSalience.ts';
 import { NumberStepper } from './NumberStepper.tsx';
 import { InteractiveTag } from './InteractiveTag.tsx';
+import { SectionSummaryToggle } from './SectionSummaryToggle.tsx';
 import {
   Sparkles,
   Building,
@@ -42,6 +43,8 @@ interface AffinitiesViewProps {
   excludedTropes?: string[];
   onIncludeTrope?: (tag: string, initialBias?: number) => void;
   onRemoveTrope?: (tag: string) => void;
+  summarySections?: SummarySectionToggles;
+  onToggleSummarySection?: (section: keyof SummarySectionToggles) => void;
 }
 
 export const AffinitiesView: React.FC<AffinitiesViewProps> = ({
@@ -64,7 +67,9 @@ export const AffinitiesView: React.FC<AffinitiesViewProps> = ({
   includedTropes = [],
   excludedTropes = [],
   onIncludeTrope,
-  onRemoveTrope
+  onRemoveTrope,
+  summarySections,
+  onToggleSummarySection
 }) => {
   const [isDragOverGenreTop, setIsDragOverGenreTop] = useState(false);
   const [isDragOverGenrePenalized, setIsDragOverGenrePenalized] = useState(false);
@@ -541,7 +546,12 @@ export const AffinitiesView: React.FC<AffinitiesViewProps> = ({
                 Genre Affinity
               </h3>
             </div>
-            <span className="text-[11px] text-[#94A3B8] font-mono">Fixed while hovering (re-ranks on exit)</span>
+            {onToggleSummarySection && (
+              <SectionSummaryToggle
+                enabled={summarySections?.genres ?? true}
+                onToggle={() => onToggleSummarySection('genres')}
+              />
+            )}
           </div>
 
           {/* Top Positive Zone: Genre Affinity (Drop Zone) */}
@@ -748,7 +758,12 @@ export const AffinitiesView: React.FC<AffinitiesViewProps> = ({
                 Micro-Themes
               </h3>
             </div>
-            <span className="text-[11px] text-[#94A3B8] font-mono">Drag themes to modulate</span>
+            {onToggleSummarySection && (
+              <SectionSummaryToggle
+                enabled={summarySections?.tropes ?? true}
+                onToggle={() => onToggleSummarySection('tropes')}
+              />
+            )}
           </div>
 
           <div className="space-y-4">
@@ -922,7 +937,12 @@ export const AffinitiesView: React.FC<AffinitiesViewProps> = ({
                 Studios
               </h3>
             </div>
-            <span className="text-[11px] text-[#94A3B8] font-mono">Fixed while hovering (re-ranks on exit)</span>
+            {onToggleSummarySection && (
+              <SectionSummaryToggle
+                enabled={summarySections?.studios ?? true}
+                onToggle={() => onToggleSummarySection('studios')}
+              />
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2.5">
@@ -1023,7 +1043,12 @@ export const AffinitiesView: React.FC<AffinitiesViewProps> = ({
                 Release Eras
               </h3>
             </div>
-            <span className="text-[11px] text-[#94A3B8] font-mono">Temporal Bias</span>
+            {onToggleSummarySection && (
+              <SectionSummaryToggle
+                enabled={summarySections?.eras ?? true}
+                onToggle={() => onToggleSummarySection('eras')}
+              />
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

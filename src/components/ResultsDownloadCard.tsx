@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TasteProfile, TasteBiases } from '../types/anilist.ts';
+import { TasteProfile, TasteBiases, SummarySectionToggles } from '../types/anilist.ts';
 import { generateLlmMarkdown, downloadFile } from '../algorithms/llmSerializer.ts';
 import {
   Download,
@@ -24,6 +24,7 @@ interface ResultsDownloadCardProps {
   demotedGenres?: string[];
   promotedStudios?: string[];
   demotedStudios?: string[];
+  summarySections?: SummarySectionToggles;
 }
 
 interface ProposedQuery {
@@ -74,7 +75,16 @@ const PROPOSED_QUERIES: ProposedQuery[] = [
   }
 ];
 
-export const ResultsDownloadCard: React.FC<ResultsDownloadCardProps> = ({ profile, biases, excludedTropes = [], promotedGenres = [], demotedGenres = [], promotedStudios = [], demotedStudios = [] }) => {
+export const ResultsDownloadCard: React.FC<ResultsDownloadCardProps> = ({
+  profile,
+  biases,
+  excludedTropes = [],
+  promotedGenres = [],
+  demotedGenres = [],
+  promotedStudios = [],
+  demotedStudios = [],
+  summarySections
+}) => {
   const [downloadedMd, setDownloadedMd] = useState(false);
   const [downloadedJson, setDownloadedJson] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -82,8 +92,8 @@ export const ResultsDownloadCard: React.FC<ResultsDownloadCardProps> = ({ profil
   const [copiedQueryId, setCopiedQueryId] = useState<string | null>(null);
 
   const markdownContent = React.useMemo(
-    () => generateLlmMarkdown(profile, biases, excludedTropes, promotedGenres, demotedGenres, promotedStudios, demotedStudios),
-    [profile, biases, excludedTropes, promotedGenres, demotedGenres, promotedStudios, demotedStudios]
+    () => generateLlmMarkdown(profile, biases, excludedTropes, promotedGenres, demotedGenres, promotedStudios, demotedStudios, summarySections),
+    [profile, biases, excludedTropes, promotedGenres, demotedGenres, promotedStudios, demotedStudios, summarySections]
   );
 
   const activeBiasCount = React.useMemo(() => {

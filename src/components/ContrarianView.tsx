@@ -1,12 +1,19 @@
 import React from 'react';
 import { TasteProfile } from '../types/anilist.ts';
 import { ArrowUpRight, ArrowDownRight, Compass } from 'lucide-react';
+import { SectionSummaryToggle } from './SectionSummaryToggle.tsx';
 
 interface ContrarianViewProps {
   profile: TasteProfile;
+  summaryEnabled?: boolean;
+  onToggleSummary?: () => void;
 }
 
-export const ContrarianView: React.FC<ContrarianViewProps> = ({ profile }) => {
+export const ContrarianView: React.FC<ContrarianViewProps> = ({
+  profile,
+  summaryEnabled = true,
+  onToggleSummary
+}) => {
   return (
     <div className="bg-[#131722] border border-[#1E2538] rounded-xl p-5 shadow-sm space-y-4 w-full">
       <div className="flex items-center justify-between border-b border-[#1E2538] pb-3">
@@ -16,7 +23,12 @@ export const ContrarianView: React.FC<ContrarianViewProps> = ({ profile }) => {
             Divergence Residuals (Δ vs AniList Community Consensus)
           </h3>
         </div>
-        <span className="text-[11px] text-[#94A3B8] font-mono">High-Signal Taste Differentiators</span>
+        {onToggleSummary && (
+          <SectionSummaryToggle
+            enabled={summaryEnabled}
+            onToggle={onToggleSummary}
+          />
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

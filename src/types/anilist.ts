@@ -32,7 +32,15 @@ export interface AniListMedia {
   seasonYear: number | null;
   startDate?: {
     year: number | null;
+    month?: number | null;
+    day?: number | null;
   } | null;
+  endDate?: {
+    year: number | null;
+    month?: number | null;
+    day?: number | null;
+  } | null;
+  airingStatus?: string | null;
   source: string | null;
   countryOfOrigin?: string | null;
   averageScore: number | null;
@@ -220,4 +228,44 @@ export interface TasteProfile {
   availableTropes: TropeSalienceItem[];
   allProcessed: ProcessedAnime[];
   baseBias?: BaseBiasMode;
+}
+
+
+export type EndDateSource = 'endDate' | 'startDate' | 'today' | 'unknown';
+
+export interface DateFixerRow {
+  mediaId: number;
+  title: string;
+  listStatus: string;              // COMPLETED, DROPPED, PAUSED, CURRENT, PLANNING, REPEATING
+  watchDate: FuzzyDate | null;     // current completedAt
+  pendingWatchDate: FuzzyDate | null; // pending (after user action), undefined = no change queued
+  hasPendingChange: boolean;
+  animeEndDate: FuzzyDate | null;  // resolved effective date
+  endDateSource: EndDateSource;
+  discrepancyDays: number | null;  // watchDate - animeEndDate in days (signed)
+  updatedAt?: number | null;
+}
+
+export interface DatePatch {
+  mediaId: number;
+  title: string;
+  completedAt: FuzzyDate | null;   // null = clear the date
+}
+
+export interface PatchResult {
+  success: boolean;
+  status: number;
+  isRetryable: boolean;
+  errorMessage?: string;
+  retryAfterSeconds?: number;
+}
+
+export interface PatchLogEntry {
+  id: string;
+  timestamp: string;
+  batch: number;
+  mediaId: number;
+  title: string;
+  type: 'success' | 'retryable' | 'error' | 'info';
+  message: string;
 }
