@@ -19,6 +19,11 @@ import {
 interface ResultsDownloadCardProps {
   profile: TasteProfile;
   biases?: TasteBiases;
+  excludedTropes?: string[];
+  promotedGenres?: string[];
+  demotedGenres?: string[];
+  promotedStudios?: string[];
+  demotedStudios?: string[];
 }
 
 interface ProposedQuery {
@@ -69,14 +74,17 @@ const PROPOSED_QUERIES: ProposedQuery[] = [
   }
 ];
 
-export const ResultsDownloadCard: React.FC<ResultsDownloadCardProps> = ({ profile, biases }) => {
+export const ResultsDownloadCard: React.FC<ResultsDownloadCardProps> = ({ profile, biases, excludedTropes = [], promotedGenres = [], demotedGenres = [], promotedStudios = [], demotedStudios = [] }) => {
   const [downloadedMd, setDownloadedMd] = useState(false);
   const [downloadedJson, setDownloadedJson] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [showQueries, setShowQueries] = useState(false);
   const [copiedQueryId, setCopiedQueryId] = useState<string | null>(null);
 
-  const markdownContent = React.useMemo(() => generateLlmMarkdown(profile, biases), [profile, biases]);
+  const markdownContent = React.useMemo(
+    () => generateLlmMarkdown(profile, biases, excludedTropes, promotedGenres, demotedGenres, promotedStudios, demotedStudios),
+    [profile, biases, excludedTropes, promotedGenres, demotedGenres, promotedStudios, demotedStudios]
+  );
 
   const activeBiasCount = React.useMemo(() => {
     if (!biases) return 0;

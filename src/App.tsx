@@ -543,7 +543,7 @@ export const App: React.FC = () => {
               <OverviewCards profile={profile} />
 
               {/* 2. Prominent Download Results Action Card */}
-              <ResultsDownloadCard profile={profile} biases={biases} />
+              <ResultsDownloadCard profile={profile} biases={biases} excludedTropes={excludedTropes} promotedGenres={promotedGenres} demotedGenres={demotedGenres} promotedStudios={promotedStudios} demotedStudios={demotedStudios} />
 
               {/* 3. Mathematical Affinities (Bayesian Genres, Studios, Tropes, Eras, Sources) */}
               <AffinitiesView

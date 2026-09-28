@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { TasteProfile, TasteBiases, TropeSalienceItem, AffinityItem } from '../types/anilist.ts';
+import { calculateTropeSalience } from '../algorithms/tropeSalience.ts';
 import { NumberStepper } from './NumberStepper.tsx';
+import { InteractiveTag } from './InteractiveTag.tsx';
 import {
   Sparkles,
   Building,
@@ -8,13 +10,13 @@ import {
   ThumbsDown,
   Calendar,
   BookOpen,
-  RotateCcw,
   ChevronDown,
   ChevronUp,
   GripVertical,
   Plus,
   Minus,
   X,
+  Eye,
   Maximize2,
   Minimize2
 } from 'lucide-react';
@@ -66,11 +68,11 @@ export const AffinitiesView: React.FC<AffinitiesViewProps> = ({
 }) => {
   const [isDragOverGenreTop, setIsDragOverGenreTop] = useState(false);
   const [isDragOverGenrePenalized, setIsDragOverGenrePenalized] = useState(false);
-  const [isGenrePoolExpanded, setIsGenrePoolExpanded] = useState(false);
   const [showStudioContenders, setShowStudioContenders] = useState(false);
   const [isDragOverFavored, setIsDragOverFavored] = useState(false);
   const [isDragOverHated, setIsDragOverHated] = useState(false);
   const [isPoolExpanded, setIsPoolExpanded] = useState(false);
+  const [showAllThemes, setShowAllThemes] = useState(false);
 
   // Reset deferred ordering when profile changes
   useEffect(() => {
@@ -364,29 +366,40 @@ export const AffinitiesView: React.FC<AffinitiesViewProps> = ({
     .map(name => studioCandidateMap.get(name))
     .filter((s): s is NonNullable<typeof s> => Boolean(s));
 
-  // 3. Dynamic Micro-Tropes Map
+  // 3. Dynamic Micro-Tropes Map & Salience Calculation
+  const resolvedTropes = React.useMemo(() => {
+    if (profile.allProcessed && profile.allProcessed.length > 0) {
+      return calculateTropeSalience(profile.allProcessed, profile.meanScore);
+    }
+    return {
+      lovedTropes: profile.lovedTropes,
+      hatedTropes: profile.hatedTropes,
+      availableTropes: profile.availableTropes
+    };
+  }, [profile.allProcessed, profile.meanScore, profile.lovedTropes, profile.hatedTropes, profile.availableTropes]);
+
   const tropeMap = React.useMemo(() => {
     const map = new Map<string, TropeSalienceItem>();
-    for (const t of [...profile.lovedTropes, ...profile.hatedTropes, ...profile.availableTropes]) {
+    for (const t of [...resolvedTropes.lovedTropes, ...resolvedTropes.hatedTropes, ...resolvedTropes.availableTropes]) {
       map.set(t.tag, t);
     }
     return map;
-  }, [profile.lovedTropes, profile.hatedTropes, profile.availableTropes]);
+  }, [resolvedTropes]);
 
   // All active trope tags: loved + hated + included - excluded
   const allActiveTags = React.useMemo(() => {
     const tags = new Set<string>();
-    for (const t of profile.lovedTropes) {
+    for (const t of resolvedTropes.lovedTropes) {
       if (!excludedTropes.includes(t.tag)) tags.add(t.tag);
     }
-    for (const t of profile.hatedTropes) {
+    for (const t of resolvedTropes.hatedTropes) {
       if (!excludedTropes.includes(t.tag)) tags.add(t.tag);
     }
     for (const tag of includedTropes) {
       if (!excludedTropes.includes(tag)) tags.add(tag);
     }
     return Array.from(tags);
-  }, [profile.lovedTropes, profile.hatedTropes, includedTropes, excludedTropes]);
+  }, [resolvedTropes.lovedTropes, resolvedTropes.hatedTropes, includedTropes, excludedTropes]);
 
   // Deferred Favored & Drop-Trigger Tropes Order
   const [favoredOrder, setFavoredOrder] = useState<string[]>([]);
@@ -465,30 +478,28 @@ export const AffinitiesView: React.FC<AffinitiesViewProps> = ({
   const unassignedTropes = React.useMemo(() => {
     const active = new Set(allActiveTags);
     const all = [
-      ...profile.availableTropes,
-      ...profile.lovedTropes,
-      ...profile.hatedTropes
+      ...resolvedTropes.availableTropes,
+      ...resolvedTropes.lovedTropes,
+      ...resolvedTropes.hatedTropes
     ];
     const seen = new Set<string>();
     const result: TropeSalienceItem[] = [];
     for (const t of all) {
       if (!active.has(t.tag) && !seen.has(t.tag)) {
         seen.add(t.tag);
-        result.push(t);
+        if (showAllThemes || t.meetsThreshold !== false) {
+          result.push(t);
+        }
       }
     }
-    result.sort((a, b) => b.score - a.score);
+    result.sort((a, b) => {
+      if (a.meetsThreshold !== b.meetsThreshold) {
+        return a.meetsThreshold ? -1 : 1;
+      }
+      return b.score - a.score;
+    });
     return result;
-  }, [profile.availableTropes, profile.lovedTropes, profile.hatedTropes, allActiveTags]);
-
-  // Total active biases count
-  const activeBiasCount = React.useMemo(() => {
-    let count = 0;
-    for (const cat of ['genres', 'eras', 'tropes', 'sources', 'studios'] as const) {
-      count += Object.values(biases[cat] || {}).filter((b) => b !== 0).length;
-    }
-    return count;
-  }, [biases]);
+  }, [resolvedTropes, allActiveTags, showAllThemes]);
 
   // Drag and Drop handlers
   const handleDragStart = (e: React.DragEvent, tag: string) => {
@@ -519,33 +530,6 @@ export const AffinitiesView: React.FC<AffinitiesViewProps> = ({
 
   return (
     <div className="space-y-6 w-full">
-      {/* Top Global Status Banner if biases active */}
-      {activeBiasCount > 0 && (
-        <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-[#00F0FF]/10 border border-[#00F0FF]/30 text-xs font-mono">
-          <div className="flex items-center gap-2 text-[#00F0FF]">
-            <Sparkles className="w-4 h-4" />
-            <span className="font-bold">{activeBiasCount} Active Taste Biases Steered</span>
-            <span className="text-[#94A3B8] font-normal hidden sm:inline">
-              (Order updates once cursor leaves NumberField)
-            </span>
-          </div>
-          <button
-            onClick={() => {
-              onResetBiases();
-              setGenreOrder([]);
-              setStudioOrder([]);
-              setFavoredOrder([]);
-              setHatedOrder([]);
-              setPenalizedOrder([]);
-            }}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#0E1118] border border-[#00F0FF]/30 hover:border-[#00F0FF] text-[#00F0FF] hover:bg-[#00F0FF]/15 transition-all cursor-pointer"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset All Biases</span>
-          </button>
-        </div>
-      )}
-
       {/* Top Row: Steerable Genres (Section 1) & Steerable Micro-Themes (Section 2) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Steerable Genres */}
@@ -671,33 +655,10 @@ export const AffinitiesView: React.FC<AffinitiesViewProps> = ({
               <span className="text-[11px] text-[#BD86F8] font-mono uppercase tracking-wider flex items-center gap-1.5">
                 <GripVertical className="w-3.5 h-3.5" /> Genre Library Pool ({unassignedGenres.length})
               </span>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-[#94A3B8] font-mono hidden sm:inline">
-                  Drag or click + to activate
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setIsGenrePoolExpanded(!isGenrePoolExpanded)}
-                  title={isGenrePoolExpanded ? "Collapse genre library pool" : "Expand genre library pool for more visibility"}
-                  className="p-1 rounded text-[#94A3B8] hover:text-[#BD86F8] hover:bg-[#A953F6]/20 transition-all flex items-center gap-1 text-[10px] font-mono cursor-pointer border border-[#1E2538] hover:border-[#A953F6]/40"
-                >
-                  {isGenrePoolExpanded ? (
-                    <>
-                      <Minimize2 className="w-3 h-3" />
-                      <span className="hidden sm:inline">Collapse</span>
-                    </>
-                  ) : (
-                    <>
-                      <Maximize2 className="w-3 h-3" />
-                      <span className="hidden sm:inline">Expand</span>
-                    </>
-                  )}
-                </button>
-              </div>
             </div>
 
             {/* Scrollable genre pills container */}
-            <div className={`${isGenrePoolExpanded ? 'max-h-96' : 'max-h-28'} transition-all duration-200 overflow-y-auto pr-1 flex flex-wrap gap-1.5`}>
+            <div className="max-h-36 overflow-y-auto pr-1 flex flex-wrap gap-1.5">
               {unassignedGenres.map((g) => (
                 <div
                   key={g.name}
@@ -749,53 +710,28 @@ export const AffinitiesView: React.FC<AffinitiesViewProps> = ({
                 Drag genres here to penalize
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="flex flex-wrap gap-2 min-h-[44px] items-center">
                 {displayPenalizedGenres.map((g) => {
                   const bias = biases.genres?.[g.name] || 0;
                   const steeredScore = Math.max(0, Math.round((g.bayesianScore + bias) * 10) / 10);
                   const isPromoted = isPenalizedPromoted(g.name) && !profile.penalizedGenres.some(x => x.name === g.name);
 
                   return (
-                    <div
+                    <InteractiveTag
                       key={g.name}
-                      className={`group p-2 rounded-lg border flex items-center justify-between text-xs transition-colors ${
-                        isPromoted
-                          ? 'bg-[#F2741D]/5 border-[#F2741D]/40 hover:border-[#F2741D]'
-                          : 'bg-[#0E1118] border-[#1E2538] hover:border-[#1E2538]/80'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[#94A3B8] truncate">{g.name}</span>
-                        {isPromoted && (
-                          <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-[#F2741D]/20 text-[#F2741D] border border-[#F2741D]/30 shrink-0">
-                            Added
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <NumberStepper
-                          value={bias}
-                          min={-5.0}
-                          max={5.0}
-                          step={0.1}
-                          hoverOnly={true}
-                          onMouseEnter={handlePenalizedStepperEnter}
-                          onMouseLeave={handlePenalizedStepperLeave}
-                          onChange={(newVal) => onBiasChange('genres', g.name, newVal)}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleDemotePenalizedGenre(g.name)}
-                          title="Move to genre library pool"
-                          className="p-1 rounded text-[#94A3B8] hover:text-[#F2741D] hover:bg-[#F2741D]/20 transition-all cursor-pointer opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto shrink-0"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                        <span className={`font-mono text-xs font-bold ${bias > 0 ? 'text-[#00F0FF]' : bias < 0 ? 'text-[#BD4214]' : 'text-[#F2741D]'}`}>
-                          {steeredScore.toFixed(1)}
-                        </span>
-                      </div>
-                    </div>
+                      label={g.name}
+                      valueDisplay={steeredScore.toFixed(1)}
+                      bias={bias}
+                      min={-5.0}
+                      max={5.0}
+                      step={0.1}
+                      variant="orange"
+                      badge={isPromoted ? 'Added' : undefined}
+                      onBiasChange={(newVal) => onBiasChange('genres', g.name, newVal)}
+                      onRemove={() => handleDemotePenalizedGenre(g.name)}
+                      onStepperEnter={handlePenalizedStepperEnter}
+                      onStepperLeave={handlePenalizedStepperLeave}
+                    />
                   );
                 })}
               </div>
@@ -834,35 +770,22 @@ export const AffinitiesView: React.FC<AffinitiesViewProps> = ({
                 <span className="text-[10px] text-[#94A3B8]">Total Steered %</span>
               </span>
 
-              <div className="flex flex-wrap gap-2 min-h-[38px] items-center">
+              <div className="flex flex-wrap gap-2 min-h-[44px] items-center">
                 {favoredTropesList.map((t) => (
-                  <div
+                  <InteractiveTag
                     key={t.tag}
-                    className="group px-2.5 py-1 rounded-md text-xs font-medium bg-[#00F0FF]/10 text-[#00F0FF] border border-[#00F0FF]/30 flex items-center gap-1.5 font-mono shadow-sm"
-                  >
-                    <span>{t.tag}</span>
-                    <span className="font-bold text-[11px]">
-                      {t.steeredPct > 0 ? `+${t.steeredPct}%` : `${t.steeredPct}%`}
-                    </span>
-                    <NumberStepper
-                      value={t.bias}
-                      min={-100.0}
-                      max={100.0}
-                      step={0.1}
-                      hoverOnly={true}
-                      onMouseEnter={handleTropeStepperEnter}
-                      onMouseLeave={handleTropeStepperLeave}
-                      onChange={(newVal) => onBiasChange('tropes', t.tag, newVal)}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTrope(t.tag)}
-                      title="Remove to library pool"
-                      className="p-0.5 rounded text-[#94A3B8] hover:text-[#F2741D] hover:bg-[#F2741D]/20 cursor-pointer opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity shrink-0 ml-0.5"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
+                    label={t.tag}
+                    valueDisplay={t.steeredPct > 0 ? `+${t.steeredPct.toFixed(1)}%` : `${t.steeredPct.toFixed(1)}%`}
+                    bias={t.bias}
+                    min={-100.0}
+                    max={100.0}
+                    step={0.1}
+                    variant="cyan"
+                    onBiasChange={(newVal) => onBiasChange('tropes', t.tag, newVal)}
+                    onRemove={() => handleRemoveTrope(t.tag)}
+                    onStepperEnter={handleTropeStepperEnter}
+                    onStepperLeave={handleTropeStepperLeave}
+                  />
                 ))}
               </div>
             </div>
@@ -874,9 +797,19 @@ export const AffinitiesView: React.FC<AffinitiesViewProps> = ({
                   <GripVertical className="w-3.5 h-3.5" /> Library Themes Pool ({unassignedTropes.length})
                 </span>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-[#94A3B8] font-mono hidden sm:inline">
-                    Drag or click + to activate
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowAllThemes(!showAllThemes)}
+                    title={showAllThemes ? "Hide low-frequency themes (< 3 shows)" : "Show all themes including low-frequency (< 3 shows)"}
+                    className={`p-1 px-2 rounded text-[10px] font-mono transition-all flex items-center gap-1 cursor-pointer border ${
+                      showAllThemes
+                        ? 'bg-[#A953F6]/25 border-[#A953F6] text-[#F1F5F9]'
+                        : 'border-[#1E2538] hover:border-[#A953F6]/40 text-[#94A3B8] hover:text-[#BD86F8] hover:bg-[#A953F6]/10'
+                    }`}
+                  >
+                    <Eye className={`w-3 h-3 ${showAllThemes ? 'text-[#BD86F8]' : ''}`} />
+                    <span>{showAllThemes ? "Showing All" : "Show All"}</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setIsPoolExpanded(!isPoolExpanded)}
@@ -899,20 +832,29 @@ export const AffinitiesView: React.FC<AffinitiesViewProps> = ({
               </div>
 
               {/* Scrollable themes pills container */}
-              <div className={`${isPoolExpanded ? 'max-h-96' : 'max-h-28'} transition-all duration-200 overflow-y-auto pr-1 flex flex-wrap gap-1.5`}>
+              <div className={`${isPoolExpanded ? 'max-h-96' : showAllThemes ? 'max-h-60' : 'max-h-28'} transition-all duration-200 overflow-y-auto pr-1 flex flex-wrap gap-1.5`}>
                 {unassignedTropes.map((t) => (
                   <div
                     key={t.tag}
                     draggable
                     onDragStart={(e) => handleDragStart(e, t.tag)}
-                    className="group px-2 py-1 rounded-md text-[11px] font-mono bg-[#131722] hover:bg-[#19202F] border border-[#1E2538] hover:border-[#A953F6]/50 text-[#F1F5F9] flex items-center gap-1.5 cursor-grab active:cursor-grabbing transition-all select-none"
-                    title={`Drag into Favored/Drop-Trigger, or click + (${t.topFrequency} completed, ${t.droppedFrequency} dropped)`}
+                    className={`group px-2 py-1 rounded-md text-[11px] font-mono border text-[#F1F5F9] flex items-center gap-1.5 cursor-grab active:cursor-grabbing transition-all select-none ${
+                      t.meetsThreshold === false
+                        ? 'bg-[#131722]/60 border-[#1E2538]/70 opacity-75 hover:opacity-100 hover:border-[#A953F6]/40'
+                        : 'bg-[#131722] hover:bg-[#19202F] border-[#1E2538] hover:border-[#A953F6]/50'
+                    }`}
+                    title={`Drag into Favored/Drop-Trigger, or click + (${t.topFrequency} completed, ${t.droppedFrequency} dropped)${t.meetsThreshold === false ? ' · Low frequency (< 3 shows)' : ''}`}
                   >
                     <GripVertical className="w-3 h-3 text-[#555E6E] group-hover:text-[#BD86F8]" />
                     <span>{t.tag}</span>
                     <span className={`text-[10px] ${t.score >= 0 ? 'text-[#00F0FF]' : 'text-[#F2741D]'}`}>
                       ({t.score > 0 ? `+${t.score}%` : `${t.score}%`})
                     </span>
+                    {t.meetsThreshold === false && (
+                      <span className="text-[9px] text-[#717E94] font-mono bg-white/5 px-1 rounded" title="Appears in fewer than 3 shows">
+                        &lt;3
+                      </span>
+                    )}
 
                     {/* Single (+) Button */}
                     <button
@@ -946,35 +888,22 @@ export const AffinitiesView: React.FC<AffinitiesViewProps> = ({
                 <span className="text-[10px] text-[#94A3B8]">Total Steered %</span>
               </span>
 
-              <div className="flex flex-wrap gap-2 min-h-[38px] items-center">
+              <div className="flex flex-wrap gap-2 min-h-[44px] items-center">
                 {hatedTropesList.map((t) => (
-                  <div
+                  <InteractiveTag
                     key={t.tag}
-                    className="group px-2.5 py-1 rounded-md text-xs font-medium bg-[#F2741D]/10 text-[#F2741D] border border-[#F2741D]/30 flex items-center gap-1.5 font-mono shadow-sm"
-                  >
-                    <span>{t.tag}</span>
-                    <span className="font-bold text-[11px]">
-                      {t.steeredPct > 0 ? `+${t.steeredPct}%` : `${t.steeredPct}%`}
-                    </span>
-                    <NumberStepper
-                      value={t.bias}
-                      min={-100.0}
-                      max={100.0}
-                      step={0.1}
-                      hoverOnly={true}
-                      onMouseEnter={handleTropeStepperEnter}
-                      onMouseLeave={handleTropeStepperLeave}
-                      onChange={(newVal) => onBiasChange('tropes', t.tag, newVal)}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTrope(t.tag)}
-                      title="Remove to library pool"
-                      className="p-0.5 rounded text-[#94A3B8] hover:text-[#F2741D] hover:bg-[#F2741D]/20 cursor-pointer opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity shrink-0 ml-0.5"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
+                    label={t.tag}
+                    valueDisplay={t.steeredPct > 0 ? `+${t.steeredPct.toFixed(1)}%` : `${t.steeredPct.toFixed(1)}%`}
+                    bias={t.bias}
+                    min={-100.0}
+                    max={100.0}
+                    step={0.1}
+                    variant="orange"
+                    onBiasChange={(newVal) => onBiasChange('tropes', t.tag, newVal)}
+                    onRemove={() => handleRemoveTrope(t.tag)}
+                    onStepperEnter={handleTropeStepperEnter}
+                    onStepperLeave={handleTropeStepperLeave}
+                  />
                 ))}
               </div>
             </div>
@@ -1144,23 +1073,17 @@ export const AffinitiesView: React.FC<AffinitiesViewProps> = ({
                   const bias = biases.sources?.[s.source] || 0;
                   const steeredScore = Math.max(0, Math.round((s.bayesianScore + bias) * 10) / 10);
                   return (
-                    <div
+                    <InteractiveTag
                       key={s.source}
-                      className="group px-3 py-1.5 rounded-lg bg-[#0E1118] border border-[#1E2538] flex items-center gap-2 font-mono text-xs"
-                    >
-                      <span className="text-[#F1F5F9] font-medium">{s.source}</span>
-                      <span className={`font-bold ${bias > 0 ? 'text-[#00F0FF]' : bias < 0 ? 'text-[#F2741D]' : 'text-[#BD86F8]'}`}>
-                        {steeredScore.toFixed(1)}
-                      </span>
-                      <NumberStepper
-                        value={bias}
-                        min={-5.0}
-                        max={5.0}
-                        step={0.1}
-                        hoverOnly={true}
-                        onChange={(newVal) => onBiasChange('sources', s.source, newVal)}
-                      />
-                    </div>
+                      label={s.source}
+                      valueDisplay={steeredScore.toFixed(1)}
+                      bias={bias}
+                      min={-5.0}
+                      max={5.0}
+                      step={0.1}
+                      variant="default"
+                      onBiasChange={(newVal) => onBiasChange('sources', s.source, newVal)}
+                    />
                   );
                 })}
               </div>

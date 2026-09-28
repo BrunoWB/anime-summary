@@ -124,6 +124,22 @@ export interface TasteBiases {
   studios: Record<string, number>;
 }
 
+export interface SummarySectionToggles {
+  genres: boolean;
+  tropes: boolean;
+  studios: boolean;
+  eras: boolean;
+  divergence: boolean;
+}
+
+export const createDefaultSummarySections = (): SummarySectionToggles => ({
+  genres: true,
+  tropes: true,
+  studios: true,
+  eras: true,
+  divergence: true
+});
+
 export const createEmptyBiases = (): TasteBiases => ({
   genres: {},
   eras: {},
@@ -158,6 +174,7 @@ export interface TropeSalienceItem {
   salience: number;
   bias?: number;
   steeredScore?: number;
+  meetsThreshold?: boolean;
 }
 
 export interface DivergenceItem {

@@ -10,6 +10,7 @@ interface NumberStepperProps {
   hoverOnly?: boolean;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
+  className?: string;
 }
 
 export const NumberStepper: React.FC<NumberStepperProps> = ({
@@ -20,7 +21,8 @@ export const NumberStepper: React.FC<NumberStepperProps> = ({
   onChange,
   hoverOnly = false,
   onMouseEnter,
-  onMouseLeave
+  onMouseLeave,
+  className
 }) => {
   const handleDecrement = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -56,7 +58,9 @@ export const NumberStepper: React.FC<NumberStepperProps> = ({
     <div
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className={`inline-flex items-center rounded-lg bg-[#0E1118] border border-[#1E2538] p-0.5 shadow-inner select-none ${visibilityClass}`}
+      className={`inline-flex items-center rounded-lg bg-[#0E1118] border p-0.5 select-none ${visibilityClass} ${
+        className ? className : 'border-[#1E2538] shadow-inner'
+      }`}
       title="Click + / - to adjust bias (Hold Shift for ±0.5)"
     >
       {/* Minus Button */}

@@ -21,7 +21,15 @@ function serializeAnimeRow(item: ProcessedAnime): string {
 /**
  * Builds the comprehensive, LLM-optimized Markdown payload with multi-category active bias steering.
  */
-export function generateLlmMarkdown(profile: TasteProfile, biases: TasteBiases = createEmptyBiases()): string {
+export function generateLlmMarkdown(
+  profile: TasteProfile,
+  biases: TasteBiases = createEmptyBiases(),
+  excludedTropes: string[] = [],
+  promotedGenres: string[] = [],
+  demotedGenres: string[] = [],
+  promotedStudios: string[] = [],
+  demotedStudios: string[] = []
+): string {
   const lines: string[] = [];
 
   lines.push(`# ANIME TASTE PROFILE: ${profile.username}`);
@@ -95,13 +103,34 @@ export function generateLlmMarkdown(profile: TasteProfile, biases: TasteBiases =
     lines.push('');
   }
 
-  // 4. Bayesian Genre Affinity (Including Contenders/Penalized that have user biases)
-  const candidateGenres = [
+  // 4. Bayesian Genre Affinity — mirrors AffinitiesView's displayTopGenres logic:
+  //    start from topGenres minus demoted, then add any promoted genre from the full pool
+  const allCandidateGenres = [
+    ...(profile.availableGenres || []),
     ...profile.topGenres,
-    ...profile.contenderGenres.filter(c => (biases.genres?.[c.name] || 0) !== 0),
-    ...profile.penalizedGenres.filter(p => (biases.genres?.[p.name] || 0) !== 0),
-    ...(profile.contenderPenalizedGenres || []).filter(p => (biases.genres?.[p.name] || 0) !== 0)
+    ...profile.contenderGenres,
+    ...profile.penalizedGenres,
+    ...(profile.contenderPenalizedGenres || [])
   ];
+  const seenAllGenres = new Set<string>();
+  const dedupedPool = allCandidateGenres.filter(g => {
+    if (seenAllGenres.has(g.name)) return false;
+    seenAllGenres.add(g.name);
+    return true;
+  });
+
+  const candidateGenres = profile.topGenres.filter(g => !demotedGenres.includes(g.name));
+  for (const g of dedupedPool) {
+    if (promotedGenres.includes(g.name) && !candidateGenres.some(x => x.name === g.name)) {
+      candidateGenres.push(g);
+    }
+  }
+  // Also include any genre (from any pool) that has a non-zero bias but isn't already added
+  for (const g of dedupedPool) {
+    if ((biases.genres?.[g.name] || 0) !== 0 && !candidateGenres.some(x => x.name === g.name) && !demotedGenres.includes(g.name)) {
+      candidateGenres.push(g);
+    }
+  }
   const seenGenres = new Set<string>();
   const uniqueCandidateGenres = candidateGenres.filter(g => {
     if (seenGenres.has(g.name)) return false;
@@ -134,11 +163,20 @@ export function generateLlmMarkdown(profile: TasteProfile, biases: TasteBiases =
     lines.push('');
   }
 
-  // 5. Studios (Including Contender studios that have user biases)
-  const candidateStudios = [
-    ...profile.topStudios,
-    ...profile.contenderStudios.filter(c => (biases.studios?.[c.name] || 0) !== 0)
-  ];
+  // 5. Studios — mirrors AffinitiesView's studioCandidateMap logic:
+  //    start from topStudios minus demoted, then add any promoted contender studio
+  const candidateStudios = profile.topStudios.filter(s => !demotedStudios.includes(s.name));
+  for (const s of profile.contenderStudios) {
+    if (promotedStudios.includes(s.name) && !candidateStudios.some(x => x.name === s.name)) {
+      candidateStudios.push(s);
+    }
+  }
+  // Also include any contender studio that has a non-zero bias but isn't already added
+  for (const s of profile.contenderStudios) {
+    if ((biases.studios?.[s.name] || 0) !== 0 && !candidateStudios.some(x => x.name === s.name) && !demotedStudios.includes(s.name)) {
+      candidateStudios.push(s);
+    }
+  }
   const seenStudios = new Set<string>();
   const uniqueCandidateStudios = candidateStudios.filter(s => {
     if (seenStudios.has(s.name)) return false;
@@ -173,9 +211,9 @@ export function generateLlmMarkdown(profile: TasteProfile, biases: TasteBiases =
   for (const t of allTropeItems) tropeMap.set(t.tag, t);
 
   const allRelevantTags = new Set([
-    ...profile.lovedTropes.map(t => t.tag),
-    ...profile.hatedTropes.map(t => t.tag),
-    ...Object.keys(biases.tropes || {})
+    ...profile.lovedTropes.map(t => t.tag).filter(t => !excludedTropes.includes(t)),
+    ...profile.hatedTropes.map(t => t.tag).filter(t => !excludedTropes.includes(t)),
+    ...Object.keys(biases.tropes || {}).filter(t => !excludedTropes.includes(t))
   ]);
 
   const activeLovedTags: string[] = [];
